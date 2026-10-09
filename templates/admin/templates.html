@@ -1,0 +1,173 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>Contract Template Maintenance</h3>
+<hr>
+<div class="row">
+    <!-- Left Column: Forms -->
+    <div class="col-md-4">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-dark text-white">Upload Template</div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Template Name</label>
+                        <input type="text" name="template_name" class="form-control" placeholder="REAL_ESTATE_CONTRACT" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Initial Version</label>
+                        <input type="text" name="version_number" class="form-control" value="1.0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Process Code</label>
+                        <input type="text" name="process_code" class="form-control" placeholder="PROC_RE_01" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Word Template (.docx)</label>
+                        <input type="file" name="file" class="form-control" accept=".docx" required>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="is_active" checked>
+                        <label class="form-check-label" for="is_active">Set as Active Version</label>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">Upload Template</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Jinja Test Render Tool -->
+        <div class="card shadow">
+            <div class="card-header bg-secondary text-white">Test Jinja Mapping</div>
+            <div class="card-body">
+                <form action="{{ url_for('test_render_template') }}" method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Select Template</label>
+                        <select name="template_id" class="form-select" required>
+                            {% for t in templates %}
+                            <option value="{{ t.id }}">{{ t.template_name }} (v{{ t.version_number }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Test JSON Data Context</label>
+                        <textarea name="custom_json" class="form-control" rows="4" required>{
+  "applicant": { "name": "John Doe" },
+  "contract_details": { "amount": 5000 }
+}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-warning w-100">Generate Test DOCX</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Table with Search & Filter -->
+    <div class="col-md-8">
+        <!-- Search and Filter Bar -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body bg-light">
+                <div class="row g-2">
+                    <div class="col-md-7">
+                        <input type="text" id="templateSearchInput" class="form-control" placeholder="Search by name or process code...">
+                    </div>
+                    <div class="col-md-5">
+                        <select id="statusFilterSelect" class="form-select">
+                            <option value="ALL">All Statuses</option>
+                            <option value="ACTIVE">Active Only</option>
+                            <option value="INACTIVE">Inactive Only</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped shadow-sm" id="templatesTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Name / Version</th>
+                        <th>Process Code</th>
+                        <th>Status</th>
+                        <th>Audit Trail</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for t in templates %}
+                    <tr class="template-row" 
+                        data-name="{{ t.template_name | lower }}" 
+                        data-process="{{ t.process_code | lower }}" 
+                        data-status="{% if t.is_active %}active{% else %}inactive{% endif %}">
+                        <td>
+                            <strong class="template-name-text">{{ t.template_name }}</strong><br>
+                            <small class="text-muted">v{{ t.version_number }}</small>
+                        </td>
+                        <td><code>{{ t.process_code }}</code></td>
+                        <td>
+                            {% if t.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="d-block text-muted">Changed: {{ t.status_changed_at.strftime('%Y-%m-%d %H:%M') if t.status_changed_at else '-' }}</small>
+                            <small class="d-block text-muted">By: {{ t.updated_by.username if t.updated_by else 'system' }}</small>
+                        </td>
+                        <td>
+                            <div class="btn-group-vertical btn-group-sm w-100">
+                                <a href="{{ url_for('download_raw_template', template_id=t.id) }}" class="btn btn-outline-dark btn-sm mb-1">Download .docx</a>
+                                <a href="{{ url_for('admin_edit_template', template_id=t.id) }}" class="btn btn-primary btn-sm mb-1">Edit</a>
+                                
+                                {% if t.is_active %}
+                                <form action="{{ url_for('duplicate_template', template_id=t.id) }}" method="POST" class="mb-1">
+                                    <button type="submit" class="btn btn-warning btn-sm w-100">Duplicate (vNext)</button>
+                                </form>
+                                {% endif %}
+                                
+                                <form action="{{ url_for('admin_delete_template', template_id=t.id) }}" method="POST" onsubmit="return confirm('Delete this template?');">
+                                    <button type="submit" class="btn btn-danger btn-sm w-100">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Search Filtering Script -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('templateSearchInput');
+    const statusFilter = document.getElementById('statusFilterSelect');
+    const rows = document.querySelectorAll('.template-row');
+
+    function filterTable() {
+        const query = searchInput.value.trim().toLowerCase();
+        const selectedStatus = statusFilter.value;
+
+        rows.forEach(row => {
+            const name = row.getAttribute('data-name');
+            const process = row.getAttribute('data-process');
+            const status = row.getAttribute('data-status');
+
+            const matchesSearch = name.includes(query) || process.includes(query);
+            const matchesStatus = (selectedStatus === 'ALL') || 
+                                  (selectedStatus === 'ACTIVE' && status === 'active') || 
+                                  (selectedStatus === 'INACTIVE' && status === 'inactive');
+
+            if (matchesSearch && matchesStatus) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('keyup', filterTable);
+    if (statusFilter) statusFilter.addEventListener('change', filterTable);
+});
+</script>
+{% endblock %}

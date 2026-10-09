@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row">
+    <div class="col-md-12 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">Application Lookup & Contract Generation</div>
+            <div class="card-body">
+                <form id="lookupForm" class="row g-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Application Reference</label>
+                        <input type="text" id="appRef" class="form-control" placeholder="e.g. APP-2026-901" required>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Active Contract Template (Role Based)</label>
+                        <select id="templateSelect" class="form-select" required>
+                            <option value="">-- Choose Template --</option>
+                            {% for tmpl in templates %}
+                            <option value="{{ tmpl.id }}" data-process="{{ tmpl.process_code }}">
+                                {{ tmpl.template_name }} (v{{ tmpl.version_number }}) - Code: {{ tmpl.process_code }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success w-100">Lookup Data</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-12" id="resultsSection" style="display: none;">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                <span>Returned Payload Data</span>
+                <button id="downloadBtn" class="btn btn-primary btn-sm">Download Word Contract (.docx)</button>
+            </div>
+            <div class="card-body">
+                <div id="jsonTreeView" class="bg-white p-3 border rounded"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

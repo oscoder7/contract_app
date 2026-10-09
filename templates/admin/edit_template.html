@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">Edit Template: {{ template.template_name }} (v{{ template.version_number }})</div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Process Code</label>
+                        <input type="text" name="process_code" class="form-control" value="{{ template.process_code }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Replace Word Template File (.docx optional)</label>
+                        <input type="file" name="file" class="form-control" accept=".docx">
+                        <small class="text-muted d-block mt-1">Current file path: {{ template.file_path }}</small>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if template.is_active %}checked{% endif %}>
+                        <label class="form-check-label" for="is_active">Set as Active Version</label>
+                    </div>
+                    <button type="submit" class="btn btn-success">Save Changes</button>
+                    <a href="{{ url_for('admin_templates') }}" class="btn btn-secondary">Cancel</a>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

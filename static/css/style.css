@@ -1,0 +1,14 @@
+ul.tree-node {
+    list-style-type: none;
+    padding-left: 20px;
+}
+ul.tree-node li {
+    margin: 4px 0;
+}
+details summary {
+    cursor: pointer;
+    font-weight: 600;
+}
+details summary:hover {
+    color: #0d6efd;
+}

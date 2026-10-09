@@ -1,0 +1,200 @@
+{% extends 'base.html' %}
+{% block content %}
+<h3>User Management</h3>
+<hr>
+<div class="row">
+    <!-- Left Column: Create User Form -->
+    <div class="col-md-4">
+        <div class="card shadow mb-4">
+            <div class="card-header bg-dark text-white">Create New User</div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('admin_users') }}">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control" required placeholder="e.g. john_doe">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Password</label>
+                        <input type="password" name="password" class="form-control" placeholder="Leave blank if LDAP SSO only">
+                    </div>
+
+                    <!-- Privilege Checkboxes -->
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="is_admin" id="is_admin">
+                        <label class="form-check-label fw-bold text-danger" for="is_admin">Grant Administrator Access</label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="is_ldap" id="is_ldap">
+                        <label class="form-check-label" for="is_ldap">Enable LDAP SSO</label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">LDAP DN (Optional)</label>
+                        <input type="text" name="ldap_dn" class="form-control" placeholder="uid=john,dc=example,dc=com">
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Assign Roles</label>
+                        {% for r in roles %}
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="roles" value="{{ r.id }}" id="role_add_{{ r.id }}">
+                            <label class="form-check-label" for="role_add_{{ r.id }}">{{ r.name }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <button type="submit" class="btn btn-success w-100">Create User</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Searchable & Filterable Users Table -->
+    <div class="col-md-8">
+        <!-- Search and Filter Bar -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body bg-light">
+                <div class="row g-2">
+                    <div class="col-md-6">
+                        <input type="text" id="userSearchInput" class="form-control" placeholder="Search by username or LDAP DN...">
+                    </div>
+                    <div class="col-md-3">
+                        <select id="roleFilterSelect" class="form-select">
+                            <option value="ALL">All Roles</option>
+                            {% for r in roles %}
+                            <option value="{{ r.name | lower }}">{{ r.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="typeFilterSelect" class="form-select">
+                            <option value="ALL">All Users</option>
+                            <option value="ADMIN">Admins Only</option>
+                            <option value="SSO">LDAP / SSO Only</option>
+                            <option value="LOCAL">Local Auth Only</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped shadow-sm" id="usersTable">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Username</th>
+                        <th>Auth Type</th>
+                        <th>Assigned Roles</th>
+                        <th>Privilege</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for u in users %}
+                    <tr class="user-row" 
+                        data-username="{{ u.username | lower }}" 
+                        data-ldapdn="{{ (u.ldap_dn or '') | lower }}"
+                        data-roles="{% for r in u.roles %}{{ r.name | lower }} {% endfor %}"
+                        data-isadmin="{% if u.is_admin %}true{% else %}false{% endif %}"
+                        data-isldap="{% if u.is_ldap_user %}true{% else %}false{% endif %}">
+                        
+                        <td>
+                            <strong class="user-name-text">{{ u.username }}</strong>
+                            {% if u.ldap_dn %}
+                            <br><small class="text-muted d-block text-truncate" style="max-width: 200px;">{{ u.ldap_dn }}</small>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            {% if u.is_ldap_user %}
+                            <span class="badge bg-info text-dark">LDAP / SSO</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Local DB</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            {% if u.roles %}
+                                {% for r in u.roles %}
+                                <span class="badge bg-primary mb-1">{{ r.name }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted small">No roles assigned</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            {% if u.is_admin %}
+                            <span class="badge bg-danger">Administrator</span>
+                            {% else %}
+                            <span class="badge bg-light text-dark border">Standard User</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td>
+                            <div class="btn-group btn-group-sm">
+                                <a href="{{ url_for('admin_edit_user', user_id=u.id) }}" class="btn btn-outline-primary">Edit</a>
+                                {% if u.id != current_user.id %}
+                                <form action="{{ url_for('admin_delete_user', user_id=u.id) }}" method="POST" onsubmit="return confirm('Delete user {{ u.username }}?');" class="d-inline">
+                                    <button type="submit" class="btn btn-outline-danger">Delete</button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Client-side JavaScript for Instant Searching & Filtering -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const searchInput = document.getElementById('userSearchInput');
+    const roleFilter = document.getElementById('roleFilterSelect');
+    const typeFilter = document.getElementById('typeFilterSelect');
+    const rows = document.querySelectorAll('.user-row');
+
+    function filterUserTable() {
+        const query = searchInput.value.trim().toLowerCase();
+        const selectedRole = roleFilter.value;
+        const selectedType = typeFilter.value;
+
+        rows.forEach(row => {
+            const username = row.getAttribute('data-username');
+            const ldapdn = row.getAttribute('data-ldapdn');
+            const roles = row.getAttribute('data-roles');
+            const isAdmin = row.getAttribute('data-isadmin') === 'true';
+            const isLdap = row.getAttribute('data-isldap') === 'true';
+
+            // 1. Text Search Match (Username or LDAP DN)
+            const matchesSearch = username.includes(query) || ldapdn.includes(query);
+
+            // 2. Role Filter Match
+            const matchesRole = (selectedRole === 'ALL') || roles.includes(selectedRole);
+
+            // 3. User Type Filter Match
+            let matchesType = true;
+            if (selectedType === 'ADMIN') matchesType = isAdmin;
+            else if (selectedType === 'SSO') matchesType = isLdap;
+            else if (selectedType === 'LOCAL') matchesType = !isLdap;
+
+            // Display or Hide Row
+            if (matchesSearch && matchesRole && matchesType) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('keyup', filterUserTable);
+    if (roleFilter) roleFilter.addEventListener('change', filterUserTable);
+    if (typeFilter) typeFilter.addEventListener('change', filterUserTable);
+});
+</script>
+{% endblock %}
