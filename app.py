@@ -1,11 +1,12 @@
 import os
 import requests
 from datetime import datetime
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, Response, send_file,current_app
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from config import Config
 from database import db, init_db
 from models import User, Role, ContractTemplate
+from sqlalchemy.exc import IntegrityError
 
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
@@ -147,37 +148,32 @@ def user_dashboard():
 @app.route('/api/lookup', methods=['POST'])
 @login_required
 def api_lookup():
-    data = request.get_json()
+    data = request.get_json() or {}
     app_ref = data.get('application_ref')
     process_code = data.get('process_code')
-    
     if not app_ref or not process_code:
         return jsonify({'error': 'Application reference and Process Code required'}), 400
         
     try:
-        fastapi_url = f"{app.config['FASTAPI_BASE_URL']}/api/data-lookup"
-        res = requests.post(fastapi_url, json={'application_ref': app_ref, 'process_code': process_code}, timeout=10)
-        if res.status_code == 200:
-            return jsonify(res.json())
-    except Exception:
-        pass
+        # FastAPI container service URL (or set FASTAPI_BASE_URL in Flask config)
+        fastapi_url = f"{app.config.get('FASTAPI_BASE_URL', 'http://doc_service:8000')}/api/data-lookup"
         
-    # Mock data fallback for isolated local testing
-    return jsonify({
-        "application_ref": app_ref,
-        "process_code": process_code,
-        "applicant": {
-            "name": "Anwar H.",
-            "civil_id": "109823912",
-            "nationality": "Omani"
-        },
-        "contract_details": {
-            "amount": 25000.00,
-            "currency": "OMR",
-            "term_months": 48
-        },
-        "status": "APPROVED"
-    })
+        response = requests.post(
+            fastapi_url, 
+            json={'application_ref': app_ref, 'process_code': process_code}, 
+            timeout=10
+        )
+        
+        response.raise_for_status()
+        return jsonify(response.json())
+        
+    except requests.exceptions.HTTPError as he:
+        err_detail = he.response.json().get('detail', str(he)) if he.response else str(he)
+        return jsonify({'error': err_detail}), he.response.status_code if he.response else 500
+        
+    except Exception as e:
+        current_app.logger.error(f"API Lookup failed for {process_code} (Ref: {app_ref}): {e}")
+        return jsonify({'error': f'Lookup service error: {str(e)}'}), 500
 
 from datetime import datetime
 
@@ -369,6 +365,17 @@ def admin_templates():
         version_number = request.form.get('version_number')
         process_code = request.form.get('process_code')
         is_active = 'is_active' in request.form
+        # 1. Fetch templates at the very start so the variable is always defined
+        templates = ContractTemplate.query.order_by(ContractTemplate.template_name, ContractTemplate.version_number.desc()).all()
+        # 1. Check if a template with the same name and version already exists
+        existing_template = ContractTemplate.query.filter_by(
+            template_name=template_name, 
+            version_number=version_number
+        ).first()
+
+        if existing_template:
+            flash(f"A template named '{template_name}' with version '{version_number}' already exists!", "danger")
+            return render_template('admin/templates.html', templates=templates, form_data=request.form)
         
         file = request.files.get('file')
         file_path = ""
@@ -380,24 +387,29 @@ def admin_templates():
         # Ensure only one template with the same name is active
         if is_active:
             ContractTemplate.query.filter_by(template_name=template_name).update({'is_active': False})
-            
-        now = datetime.utcnow()
-        tmpl = ContractTemplate(
-            template_name=template_name,
-            version_number=version_number,
-            process_code=process_code,
-            file_path=file_path,
-            is_active=is_active,
-            status_changed_at=now,
-            status_changed_by_id=current_user.id,
-            updated_at=now,
-            updated_by_id=current_user.id
-        )
-        db.session.add(tmpl)
-        db.session.commit()
-        flash('Template created successfully', 'success')
-        return redirect(url_for('admin_templates'))
-        
+        try:        
+            now = datetime.utcnow()
+            tmpl = ContractTemplate(
+                template_name=template_name,
+                version_number=version_number,
+                process_code=process_code,
+                file_path=file_path,
+                is_active=is_active,
+                status_changed_at=now,
+                status_changed_by_id=current_user.id,
+                updated_at=now,
+                updated_by_id=current_user.id
+            )
+            db.session.add(tmpl)
+            db.session.commit()
+            flash('Template created successfully', 'success')
+            return redirect(url_for('admin_templates'))
+        except IntegrityError:
+            db.session.rollback()
+            flash(f"Database error: A template with name '{template_name}' and version '{version_number}' already exists.", "danger")
+            templates = ContractTemplate.query.order_by(ContractTemplate.template_name, ContractTemplate.version_number.desc()).all()
+            return render_template('admin/templates.html', templates=templates, form_data=request.form)
+
     templates = ContractTemplate.query.order_by(ContractTemplate.template_name, ContractTemplate.version_number.desc()).all()
     return render_template('admin/templates.html', templates=templates)
 
